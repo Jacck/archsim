@@ -2,6 +2,8 @@ import time
 from enum import Enum
 from typing import Callable, Any
 import random
+import matplotlib.pyplot as plt
+import numpy as np
 
 class CircuitState(Enum):
     CLOSED = "CLOSED"  # Normal operation
@@ -75,6 +77,58 @@ def unstable_service() -> str:
         raise Exception("Service failed!")
     return "Service succeeded!"
 
+def visualize_simulation(attempts, states, failures, results):
+    # Create figure and axis
+    plt.figure(figsize=(15, 8))
+    
+    # Create a color map for states
+    state_colors = {
+        'CLOSED': 'green',
+        'HALF_OPEN': 'yellow',
+        'OPEN': 'red'
+    }
+    
+    # Plot circuit state
+    plt.subplot(3, 1, 1)
+    state_values = [1 if s == 'CLOSED' else 0.5 if s == 'HALF_OPEN' else 0 for s in states]
+    plt.plot(attempts, state_values, 'o-', label='Circuit State')
+    plt.yticks([0, 0.5, 1], ['OPEN', 'HALF_OPEN', 'CLOSED'])
+    plt.grid(True)
+    plt.title('Circuit Breaker State Over Time')
+    plt.xlabel('Attempt Number')
+    plt.ylabel('State')
+    
+    # Plot failure count
+    plt.subplot(3, 1, 2)
+    plt.plot(attempts, failures, 'ro-', label='Failure Count')
+    plt.grid(True)
+    plt.title('Failure Count Over Time')
+    plt.xlabel('Attempt Number')
+    plt.ylabel('Count')
+    
+    # Plot service results
+    plt.subplot(3, 1, 3)
+    success_mask = [r == 'Success' for r in results]
+    failure_mask = [r == 'Failure' for r in results]
+    blocked_mask = [r == 'Blocked' for r in results]
+    
+    plt.scatter(np.array(attempts)[success_mask], [1] * sum(success_mask), 
+               color='green', label='Success', marker='o')
+    plt.scatter(np.array(attempts)[failure_mask], [0] * sum(failure_mask), 
+               color='red', label='Failure', marker='x')
+    plt.scatter(np.array(attempts)[blocked_mask], [0.5] * sum(blocked_mask), 
+               color='gray', label='Blocked', marker='s')
+    
+    plt.grid(True)
+    plt.title('Service Call Results')
+    plt.xlabel('Attempt Number')
+    plt.yticks([0, 0.5, 1], ['Failure', 'Blocked', 'Success'])
+    plt.legend()
+    
+    plt.tight_layout()
+    plt.savefig('circuit_breaker_simulation.png')
+    plt.close()
+
 def main():
     # Create circuit breaker with lower thresholds for demo
     breaker = CircuitBreaker(
@@ -83,18 +137,38 @@ def main():
         half_open_timeout=1.0 # Allow retry every 1 second in half-open
     )
     
+    # Lists to store simulation data
+    attempts = []
+    states = []
+    failures = []
+    results = []
+    
     # Run service calls in a loop
     for i in range(20):
-        print(f"\nAttempt {i + 1}")
+        attempt_num = i + 1
+        attempts.append(attempt_num)
+        states.append(breaker.state.value)
+        failures.append(breaker.failure_count)
+        
+        print(f"\nAttempt {attempt_num}")
         print(f"Circuit State: {breaker.state.value}")
+        print(f"Failure Count: {breaker.failure_count}")
         
         try:
             result = breaker.execute(unstable_service)
             print(f"Result: {result}")
+            results.append('Success')
         except Exception as e:
             print(f"Error: {str(e)}")
+            if "Circuit Breaker is" in str(e):
+                results.append('Blocked')
+            else:
+                results.append('Failure')
             
         time.sleep(1)  # Wait between attempts
+    
+    # Visualize the simulation results
+    visualize_simulation(attempts, states, failures, results)
 
 if __name__ == "__main__":
     main()
